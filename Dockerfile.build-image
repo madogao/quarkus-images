@@ -1,0 +1,48 @@
+FROM redhat/ubi8-minimal
+
+ARG SOURCES_DIR="/tmp/artifacts" \
+    UPX_VERSION="3.96" \
+    GRAALVM_VERSION="22.2-java11" \
+    TARGETARCH \
+    APP_HOME="/home/quarkus"
+
+WORKDIR $SOURCES_DIR
+ADD https://github.com/madogao/quarkus-images/releases/download/$GRAALVM_VERSION/upx-${UPX_VERSION}-${TARGETARCH}_linux.tar.xz upx-${UPX_VERSION}-${TARGETARCH}_linux.tar.xz
+ADD https://github.com/madogao/quarkus-images/releases/download/$GRAALVM_VERSION/graalvm-ce-java11-linux-$TARGETARCH-22.2.0.tar.gz graalvm-ce-java11-linux-$TARGETARCH-22.2.0.tar.gz
+
+RUN microdnf install \
+    tar \
+    gzip \
+    gcc \
+    glibc-devel \
+    zlib-devel \
+    shadow-utils \
+    unzip \
+    gcc-c++ \
+    glibc-langpack-en \
+    xz \
+    fontconfig \
+    freetype-devel
+
+RUN groupadd -r quarkus -g 1001 && useradd -u 1001 -r -g 1001 -m -d $APP_HOME -s /sbin/nologin -c "Quarkus user" quarkus \
+    && mkdir /project \
+    && chown quarkus:quarkus /project \
+    && tar xf upx-${UPX_VERSION}-${TARGETARCH}_linux.tar.xz \
+    && mv upx-${UPX_VERSION}-${TARGETARCH}_linux/upx /usr/bin/upx \
+    && tar xzf graalvm-ce-java11-linux-$TARGETARCH-22.2.0.tar.gz -C /opt \
+    && mv /opt/graalvm-ce-* /opt/graalvm \
+    && echo "Installing native-image" \
+    && /opt/graalvm/bin/gu --auto-yes install native-image
+
+USER quarkus
+
+ENV LANG="en_US.UTF-8" \
+    LANGUAGE="en_US:en" \
+    LC_ALL="en_US.UTF-8" \
+    JAVA_HOME="/opt/graalvm" \
+    GRAALVM_HOME="/opt/graalvm" \
+    PATH="${PATH}:/opt/graalvm/bin"
+
+WORKDIR /project
+VOLUME ["/project"]
+ENTRYPOINT ["native-image"]
